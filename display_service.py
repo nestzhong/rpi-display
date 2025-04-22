@@ -12,6 +12,55 @@ from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QObject
 import markdown2
 import matplotlib.pyplot as plt
 import re
+from serial import Serial, SerialException
+import time
+
+class ProjectorController:
+    def __init__(self, port='/dev/ttyUSB0', baudrate=115200):
+        self.port = port
+        self.baudrate = baudrate
+        self.serial = None
+        self.last_update_time = 0
+        self.power_off_timer = QTimer()
+        self.power_off_timer.timeout.connect(self.check_and_power_off)
+        self.power_off_timer.start(1000)  # 每秒检查一次
+        
+    def connect(self):
+        try:
+            self.serial = Serial(self.port, self.baudrate, timeout=1)
+            print(f"成功连接到投影仪串口: {self.port}")
+            return True
+        except SerialException as e:
+            print(f"连接投影仪串口失败: {str(e)}")
+            return False
+            
+    def send_command(self, command):
+        if not self.serial:
+            if not self.connect():
+                return False
+        try:
+            command_bytes = command.encode('gbk')
+            command_bytes += b'\x0D\x0A'
+            self.serial.write(command_bytes)
+            print(f"已发送投影仪命令: {command}")
+            return True
+        except Exception as e:
+            print(f"发送投影仪命令失败: {str(e)}")
+            return False
+            
+    def power_on(self):
+        return self.send_command('开机')
+        
+    def power_off(self):
+        return self.send_command('关机')
+        
+    def update_last_activity(self):
+        self.last_update_time = time.time()
+        
+    def check_and_power_off(self):
+        if self.last_update_time > 0 and time.time() - self.last_update_time > 30:
+            self.power_off()
+            self.last_update_time = 0
 
 class DisplaySignals(QObject):
     update_content = pyqtSignal(str, str)  # content, content_type
@@ -25,6 +74,11 @@ class DisplayWindow(QMainWindow):
         self.signals.update_content.connect(self.update_content)
         self.signals.next_page.connect(self.next_page)
         self.signals.prev_page.connect(self.prev_page)
+        
+        # 初始化投影仪控制器
+        self.projector = ProjectorController()
+        # 服务启动时关闭投影
+        self.projector.power_off()
         
         self.setWindowTitle("显示服务")
         self.central_widget = QWidget()
@@ -90,6 +144,10 @@ class DisplayWindow(QMainWindow):
         return pages
     
     def update_content(self, content, content_type):
+        # 更新内容时打开投影
+        self.projector.power_on()
+        self.projector.update_last_activity()
+        
         self.current_content = content
         self.current_type = content_type
         
