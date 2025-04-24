@@ -25,33 +25,72 @@ class ProjectorController:
         self.power_off_timer.timeout.connect(self.check_and_power_off)
         self.power_off_timer.start(1000)  # 每秒检查一次
         
+        # 检查串口设备是否存在
+        if not os.path.exists(self.port):
+            print(f"错误：串口设备 {self.port} 不存在")
+            return
+            
+        # 检查串口权限
+        try:
+            mode = os.stat(self.port).st_mode
+            if not mode & 0o666:  # 检查读写权限
+                print(f"警告：串口设备 {self.port} 权限不足")
+                print("请执行以下命令添加权限：")
+                print(f"sudo chmod 666 {self.port}")
+                print("或添加用户到 dialout 组：")
+                print("sudo usermod -a -G dialout $USER")
+        except Exception as e:
+            print(f"检查串口权限时出错: {str(e)}")
+        
     def connect(self):
         try:
+            if self.serial and self.serial.is_open:
+                self.serial.close()
             self.serial = Serial(self.port, self.baudrate, timeout=1)
             print(f"成功连接到投影仪串口: {self.port}")
             return True
         except SerialException as e:
             print(f"连接投影仪串口失败: {str(e)}")
+            print("可能的原因：")
+            print("1. 串口设备不存在")
+            print("2. 串口被其他程序占用")
+            print("3. 串口权限不足")
+            print("4. 串口设备未正确连接")
             return False
             
     def send_command(self, command):
-        if not self.serial:
+        if not self.serial or not self.serial.is_open:
             if not self.connect():
                 return False
         try:
+            # 确保串口是打开的
+            if not self.serial.is_open:
+                self.serial.open()
+                
+            # 清空串口缓冲区
+            self.serial.reset_input_buffer()
+            self.serial.reset_output_buffer()
+            
             command_bytes = command.encode('gbk')
             command_bytes += b'\x0D\x0A'
             self.serial.write(command_bytes)
             print(f"已发送投影仪命令: {command}")
             return True
-        except Exception as e:
+        except SerialException as e:
             print(f"发送投影仪命令失败: {str(e)}")
+            print("尝试重新连接串口...")
+            self.serial = None
+            return False
+        except Exception as e:
+            print(f"发送投影仪命令时发生未知错误: {str(e)}")
             return False
             
     def power_on(self):
+        print("尝试打开投影仪...")
         return self.send_command('开机')
         
     def power_off(self):
+        print("尝试关闭投影仪...")
         return self.send_command('关机')
         
     def update_last_activity(self):
@@ -59,6 +98,7 @@ class ProjectorController:
         
     def check_and_power_off(self):
         if self.last_update_time > 0 and time.time() - self.last_update_time > 30:
+            print("检测到30秒无活动，准备关闭投影仪...")
             self.power_off()
             self.last_update_time = 0
 
