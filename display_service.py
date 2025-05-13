@@ -104,19 +104,33 @@ class DisplayWindow(QMainWindow):
         self.current_type = content_type
         
         if content_type == "image":
-            # 图片不需要分页
             try:
+                # 移除 data:image/jpeg;base64, 前缀
+                if content.startswith('data:image'):
+                    content = content.split(',', 1)[1]
+                    
                 image_data = base64.b64decode(content)
                 image = QImage.fromData(image_data)
+                if image.isNull():
+                    raise Exception("无法从数据创建QImage")
+                    
                 pixmap = QPixmap.fromImage(image)
+                if pixmap.isNull():
+                    raise Exception("无法从QImage创建QPixmap")
                 
                 screen = QApplication.primaryScreen().geometry()
                 scaled_pixmap = pixmap.scaled(screen.width(), screen.height(),
                                             Qt.AspectRatioMode.KeepAspectRatio,
                                             Qt.TransformationMode.SmoothTransformation)
+                if scaled_pixmap.isNull():
+                    raise Exception("图片缩放失败")
+                    
                 self.content_label.setPixmap(scaled_pixmap)
+                print("图片显示成功")
             except Exception as e:
-                self.content_label.setText(f"图片显示错误: {str(e)}")
+                error_msg = f"图片显示错误: {str(e)}"
+                print(error_msg)
+                self.content_label.setText(error_msg)
         else:
             # 处理文本或Markdown内容
             if content_type == "text":
