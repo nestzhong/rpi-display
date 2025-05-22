@@ -45,7 +45,7 @@ class DisplayWindow(QMainWindow):
         self.content_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         self.content_label.setWordWrap(True)
         self.content_label.setFont(QFont("Arial", 24))
-        self.content_label.setStyleSheet("color: white; padding: 20px;")
+        self.content_label.setStyleSheet("color: white; padding: 20px; text-align: left;")
         self.layout.addWidget(self.content_label)
         
         # 分页相关变量
@@ -119,13 +119,14 @@ class DisplayWindow(QMainWindow):
                     raise Exception("无法从QImage创建QPixmap")
                 
                 screen = QApplication.primaryScreen().geometry()
-                scaled_pixmap = pixmap.scaled(screen.width(), screen.height(),
-                                            Qt.AspectRatioMode.KeepAspectRatio,
-                                            Qt.TransformationMode.SmoothTransformation)
-                if scaled_pixmap.isNull():
-                    raise Exception("图片缩放失败")
-                    
+                # 保证图片不会超出屏幕宽高
+                scaled_pixmap = pixmap.scaled(
+                    screen.width(), screen.height(),
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation
+                )
                 self.content_label.setPixmap(scaled_pixmap)
+                self.content_label.setAlignment(Qt.AlignmentFlag.AlignCenter)  # 再次确保居中
                 print("图片显示成功")
             except Exception as e:
                 error_msg = f"图片显示错误: {str(e)}"
@@ -136,7 +137,7 @@ class DisplayWindow(QMainWindow):
             if content_type == "text":
                 # 处理纯文本
                 content = content.replace('\n', '<br>')
-                processed_content = content
+                processed_content = f'<div style="text-align: left;">{content}</div>'
             elif content_type == "markdown":
                 # 处理Markdown
                 try:
@@ -185,6 +186,7 @@ class DisplayWindow(QMainWindow):
                     print("LaTeX 公式处理完成")
                     
                     processed_content = markdown2.markdown(content, extras=['fenced-code-blocks', 'tables', 'break-on-newline'])
+                    processed_content = f'<div style="text-align: left;">{processed_content}</div>'
                 except Exception as e:
                     processed_content = f"Markdown渲染错误: {str(e)}"
             
