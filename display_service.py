@@ -3,6 +3,7 @@ import sys
 import os
 import base64
 import json
+import signal
 from io import BytesIO
 from threading import Thread
 from flask import Flask, request, jsonify
@@ -58,6 +59,23 @@ class DisplayWindow(QMainWindow):
         self.page_interval = 5000  # 5秒
         
         self.showFullScreen()
+    
+    def cleanup(self):
+        """清理资源"""
+        print("正在清理资源...")
+        # 停止分页计时器
+        if hasattr(self, 'page_timer'):
+            self.page_timer.stop()
+        # 停止投影仪控制器的定时器
+        if hasattr(self, 'projector') and hasattr(self.projector, 'power_off_timer'):
+            self.projector.power_off_timer.stop()
+        # 关闭串口连接
+        if hasattr(self, 'projector') and hasattr(self.projector, 'serial') and self.projector.serial:
+            try:
+                self.projector.serial.close()
+            except:
+                pass
+        print("资源清理完成")
     
     def split_content(self, content):
         """将内容分页"""
@@ -233,6 +251,27 @@ class DisplayWindow(QMainWindow):
             # 最后一页显示完后停止计时器
             self.page_timer.stop()
 
+# 全局变量用于优雅退出
+display_window = None
+server_thread = None
+interrupted = False
+
+def signal_handler(signum, frame):
+    """信号处理器"""
+    global interrupted, display_window
+    print(f"\n接收到信号 {signum}，正在优雅退出...")
+    interrupted = True
+    
+    if display_window:
+        display_window.cleanup()
+    
+    # 退出Qt应用
+    if QApplication.instance():
+        QApplication.instance().quit()
+    
+    print("程序已退出")
+    sys.exit(0)
+
 def run_display():
     app = QApplication(sys.argv)
     window = DisplayWindow()
@@ -274,6 +313,12 @@ def run_server(display_window):
     flask_app.run(host='0.0.0.0', port=5000)
 
 def main():
+    global display_window, server_thread
+    
+    # 设置信号处理器
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
     # 设置环境变量
     os.environ['QT_QPA_PLATFORM'] = 'wayland'
     os.environ['QT_QPA_WAYLAND_DISABLE_WINDOWDECORATION'] = '1'
@@ -282,15 +327,21 @@ def main():
     
     # 创建显示窗口
     app = QApplication(sys.argv)
-    window = DisplayWindow()
+    display_window = DisplayWindow()
     
     # 启动HTTP服务器
-    server_thread = Thread(target=run_server, args=(window,))
+    server_thread = Thread(target=run_server, args=(display_window,))
     server_thread.daemon = True
     server_thread.start()
     
-    # 运行显示窗口
-    sys.exit(app.exec())
+    print("显示服务已启动，按 Ctrl+C 退出")
+    
+    try:
+        # 运行显示窗口
+        sys.exit(app.exec())
+    except KeyboardInterrupt:
+        print("\n接收到键盘中断信号")
+        signal_handler(signal.SIGINT, None)
 
 if __name__ == "__main__":
     main() 
