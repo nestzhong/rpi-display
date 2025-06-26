@@ -13,7 +13,7 @@ from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QObject
 import markdown2
 import matplotlib.pyplot as plt
 import re
-from projector_controller import ProjectorController
+# from projector_controller import ProjectorController  # 注释掉投影仪控制器导入
 
 class DisplaySignals(QObject):
     update_content = pyqtSignal(str, str)  # content, content_type
@@ -28,11 +28,12 @@ class DisplayWindow(QMainWindow):
         self.signals.next_page.connect(self.next_page)
         self.signals.prev_page.connect(self.prev_page)
         
-        # 初始化投影仪控制器
-        self.projector = ProjectorController()
-        # 服务启动时关闭投影
-        self.projector.power_off()
+        # 注释掉投影仪相关代码
+        # self.projector = ProjectorController()
+        # self.projector.power_off()
         
+        # 设置固定分辨率
+        self.setFixedSize(720, 1560)
         self.setWindowTitle("显示服务")
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
@@ -45,7 +46,8 @@ class DisplayWindow(QMainWindow):
         self.content_label = QLabel()
         self.content_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         self.content_label.setWordWrap(True)
-        self.content_label.setFont(QFont("Arial", 24))
+        # 调整字体大小以适应竖屏显示
+        self.content_label.setFont(QFont("Arial", 20))
         self.content_label.setStyleSheet("color: white; padding: 20px; text-align: left;")
         self.layout.addWidget(self.content_label)
         
@@ -66,15 +68,14 @@ class DisplayWindow(QMainWindow):
         # 停止分页计时器
         if hasattr(self, 'page_timer'):
             self.page_timer.stop()
-        # 停止投影仪控制器的定时器
-        if hasattr(self, 'projector') and hasattr(self.projector, 'power_off_timer'):
-            self.projector.power_off_timer.stop()
-        # 关闭串口连接
-        if hasattr(self, 'projector') and hasattr(self.projector, 'serial') and self.projector.serial:
-            try:
-                self.projector.serial.close()
-            except:
-                pass
+        # 注释掉投影仪相关清理代码
+        # if hasattr(self, 'projector') and hasattr(self.projector, 'power_off_timer'):
+        #     self.projector.power_off_timer.stop()
+        # if hasattr(self, 'projector') and hasattr(self.projector, 'serial') and self.projector.serial:
+        #     try:
+        #         self.projector.serial.close()
+        #     except:
+        #         pass
         print("资源清理完成")
     
     def split_content(self, content):
@@ -114,9 +115,9 @@ class DisplayWindow(QMainWindow):
         return pages
     
     def update_content(self, content, content_type):
-        # 更新内容时打开投影
-        self.projector.power_on()
-        self.projector.update_last_activity()
+        # 注释掉投影仪相关代码
+        # self.projector.power_on()
+        # self.projector.update_last_activity()
         
         self.current_content = content
         self.current_type = content_type
@@ -136,15 +137,20 @@ class DisplayWindow(QMainWindow):
                 if pixmap.isNull():
                     raise Exception("无法从QImage创建QPixmap")
                 
-                screen = QApplication.primaryScreen().geometry()
-                # 保证图片不会超出屏幕宽高
+                # 使用固定的显示屏分辨率
                 scaled_pixmap = pixmap.scaled(
-                    screen.width(), screen.height(),
+                    720, 1560,
                     Qt.AspectRatioMode.KeepAspectRatio,
                     Qt.TransformationMode.SmoothTransformation
                 )
+                
+                # 计算居中显示的位置
+                x_offset = (720 - scaled_pixmap.width()) // 2
+                y_offset = (1560 - scaled_pixmap.height()) // 2
+                
                 self.content_label.setPixmap(scaled_pixmap)
-                self.content_label.setAlignment(Qt.AlignmentFlag.AlignCenter)  # 再次确保居中
+                self.content_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                self.content_label.setContentsMargins(x_offset, y_offset, x_offset, y_offset)
                 print("图片显示成功")
             except Exception as e:
                 error_msg = f"图片显示错误: {str(e)}"
